@@ -686,11 +686,11 @@ async def chat_completions(request: ChatCompletionRequest, raw_req: Request):
     from app.core.logger import logger
     
     # 打印原始 Body 以便调试 tool_choice 丢失问题
-    try:
-        body = await raw_req.body()
-        logger.info(f"Raw JSON from client: {body.decode('utf-8')}")
-    except Exception:
-        pass
+    # try:
+    #     body = await raw_req.body()
+    #     logger.info(f"Raw JSON from client: {body.decode('utf-8')}")
+    # except Exception:
+    #     pass
 
     # 参数验证
     validate_request(request)
