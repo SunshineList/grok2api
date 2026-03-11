@@ -33,24 +33,54 @@ def build_tool_prompt(
     if tool_choice == "none":
         return ""
 
+    # Collect valid function tools info for building example
+    tool_infos = []
+    for tool in tools:
+        if tool.get("type") != "function":
+            continue
+        func = tool.get("function", {})
+        name = func.get("name", "")
+        if name:
+            tool_infos.append(func)
+
+    # --- Section 1: Core constraint (front-loaded) ---
     lines = [
-        "# Available Tools",
-        "",
-        "You have access to the following tools. To call a tool, output a <tool_call> block with a JSON object containing \"name\" and \"arguments\".",
-        "",
-        "Format:",
-        "<tool_call>",
-        '{"name": "function_name", "arguments": {"param": "value"}}',
-        "</tool_call>",
+        "[SYSTEM TOOL CALLING PROTOCOL]",
         "",
     ]
 
-    if parallel_tool_calls:
-        lines.append("You may make multiple tool calls in a single response by using multiple <tool_call> blocks.")
+    # Behavior section comes FIRST so the model sees it immediately
+    if tool_choice == "required":
+        lines.append("CONSTRAINT: You MUST call at least one tool below. Do NOT respond with text only.")
+    elif isinstance(tool_choice, dict):
+        func_info = tool_choice.get("function", {})
+        forced_name = func_info.get("name", "")
+        if forced_name:
+            lines.append(f'CONSTRAINT: You MUST call the tool "{forced_name}" in your response.')
+    else:
+        # "auto" or default — this is the critical part
+        lines.append("CONSTRAINT: You are an assistant equipped with tools. When the user's request relates to ANY capability provided by the tools below, you MUST invoke the tool — do NOT answer from your own knowledge. You have NO internal access to real-time data, external APIs, or any information the tools can provide. Answering without calling a relevant tool is a protocol violation.")
         lines.append("")
+        lines.append("Only respond with plain text if NONE of the listed tools are relevant.")
 
-    # Describe each tool
-    lines.append("## Tool Definitions")
+    lines.append("")
+
+    # --- Section 2: Format ---
+    lines.append("FORMAT: To call a tool, output a <tool_call> block with valid JSON:")
+    lines.append("")
+    lines.append("<tool_call>")
+    lines.append('{"name": "tool_name", "arguments": {"key": "value"}}')
+    lines.append("</tool_call>")
+    lines.append("")
+    lines.append("- JSON must be valid. No markdown fences. No extra wrapping.")
+    lines.append("- You may include brief text before the <tool_call> block.")
+
+    if parallel_tool_calls:
+        lines.append("- You may use multiple <tool_call> blocks for multiple calls.")
+    lines.append("")
+
+    # --- Section 3: Tool definitions ---
+    lines.append("TOOLS:")
     lines.append("")
     for tool in tools:
         if tool.get("type") != "function":
@@ -60,27 +90,32 @@ def build_tool_prompt(
         desc = func.get("description", "")
         params = func.get("parameters", {})
 
-        lines.append(f"### {name}")
-        if desc:
-            lines.append(f"{desc}")
+        lines.append(f"- {name}: {desc}" if desc else f"- {name}")
         if params:
-            lines.append(f"Parameters: {json.dumps(params, ensure_ascii=False)}")
+            lines.append(f"  Parameters: {json.dumps(params, ensure_ascii=False)}")
         lines.append("")
 
-    # Handle tool_choice directives
-    if tool_choice == "required":
-        lines.append("IMPORTANT: You MUST call at least one tool in your response. Do not respond with only text.")
-    elif isinstance(tool_choice, dict):
-        func_info = tool_choice.get("function", {})
-        forced_name = func_info.get("name", "")
-        if forced_name:
-            lines.append(f"IMPORTANT: You MUST call the tool \"{forced_name}\" in your response.")
-    else:
-        # "auto" or default
-        lines.append("Decide whether to call a tool based on the user's request. If you don't need a tool, respond normally with text only.")
+    # --- Section 4: Example using first tool ---
+    if tool_infos:
+        first = tool_infos[0]
+        ex_name = first.get("name", "tool")
+        ex_params = first.get("parameters", {})
+        ex_props = ex_params.get("properties", {})
+        # Build a simple example arguments dict
+        ex_args = {}
+        for pname, pinfo in list(ex_props.items())[:2]:
+            ex_args[pname] = f"<{pinfo.get('description', pname)}>"
+        ex_args_str = json.dumps(ex_args, ensure_ascii=False)
 
-    lines.append("")
-    lines.append("When you call a tool, you may include text before or after the <tool_call> blocks, but the tool call blocks must be valid JSON.")
+        lines.append("EXAMPLE:")
+        lines.append(f'User: (a request relevant to {ex_name})')
+        lines.append("Assistant:")
+        lines.append("<tool_call>")
+        lines.append(f'{{"name": "{ex_name}", "arguments": {ex_args_str}}}')
+        lines.append("</tool_call>")
+        lines.append("")
+
+    lines.append("[END TOOL CALLING PROTOCOL]")
 
     return "\n".join(lines)
 
