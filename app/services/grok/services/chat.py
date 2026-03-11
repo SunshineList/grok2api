@@ -245,6 +245,16 @@ class MessageExtractor:
             tool_prompt = build_tool_prompt(tools, tool_choice, parallel_tool_calls)
             if tool_prompt:
                 combined = f"{tool_prompt}\n\n{combined}"
+                # Append a short reminder at the end so the model sees it
+                # right before generating its response.  This counters
+                # in-context learning from long conversation histories where
+                # previous assistant turns may have said "I can't use tools".
+                if tool_choice != "none":
+                    combined += (
+                        "\n\n[REMINDER] You MUST use the <tool_call> format "
+                        "to invoke tools when the request matches a tool's "
+                        "capability. Do NOT say you cannot use tools."
+                    )
 
         return combined, file_attachments, image_attachments
 
