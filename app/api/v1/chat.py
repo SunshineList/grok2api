@@ -8,7 +8,7 @@ import binascii
 import time
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, Field
 import orjson
@@ -681,10 +681,17 @@ router = APIRouter(tags=["Chat"])
 
 
 @router.post("/chat/completions")
-async def chat_completions(request: ChatCompletionRequest):
+async def chat_completions(request: ChatCompletionRequest, raw_req: Request):
     """Chat Completions API - 兼容 OpenAI"""
     from app.core.logger import logger
-    logger.info(f"Chat request: {request}")
+    
+    # 打印原始 Body 以便调试 tool_choice 丢失问题
+    try:
+        body = await raw_req.body()
+        logger.info(f"Raw JSON from client: {body.decode('utf-8')}")
+    except Exception:
+        pass
+
     # 参数验证
     validate_request(request)
 
