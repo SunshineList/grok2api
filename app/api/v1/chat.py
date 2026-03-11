@@ -684,11 +684,12 @@ router = APIRouter(tags=["Chat"])
 async def chat_completions(request: ChatCompletionRequest):
     """Chat Completions API - 兼容 OpenAI"""
     from app.core.logger import logger
-
+    logger.info(f"Chat request: {request}")
     # 参数验证
     validate_request(request)
 
     logger.debug(f"Chat request: model={request.model}, stream={request.stream}")
+    logger.info(f"Tools: {request.tools is not None} (count={len(request.tools) if request.tools else 0}), tool_choice={request.tool_choice}")
 
     # 检测模型类型
     model_info = ModelService.get(request.model)
